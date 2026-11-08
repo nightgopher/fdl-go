@@ -63,14 +63,6 @@ func gridTable(nr, nc int) Table {
 	return Table{ColWidths: repeatF32(TableDefaultWidth, nc), Rows: rows}
 }
 
-func repeatF32(v float32, n int) []float32 {
-	out := make([]float32, n)
-	for i := range out {
-		out[i] = v
-	}
-	return out
-}
-
 func cellText(t *Table, r, c int) string {
 	var parts []string
 	for _, b := range t.Rows[r][c].Blocks {

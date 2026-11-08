@@ -136,3 +136,39 @@ func LangToToken(name string) string {
 	}
 	return name
 }
+
+// LangResolve 解析输入的 info string（围栏、粘贴）：精确别名 → 显示名
+// 前缀 → 模糊子序列；否则 Plain Text。
+func LangResolve(s string) string {
+	if squash(s) == "shell" {
+		return "Bash"
+	}
+	if n, ok := exactLang(s); ok {
+		return n
+	}
+	q := squash(s)
+	if q == "" {
+		return LangPlain
+	}
+	for _, l := range langs {
+		if strings.HasPrefix(squash(l.name), q) {
+			return l.name
+		}
+	}
+	qr := []rune(q)
+	subseq := func(hay string) bool {
+		i := 0
+		for _, h := range hay {
+			if i < len(qr) && h == qr[i] {
+				i++
+			}
+		}
+		return i == len(qr)
+	}
+	for _, l := range langs {
+		if subseq(squash(l.name)) {
+			return l.name
+		}
+	}
+	return LangPlain
+}

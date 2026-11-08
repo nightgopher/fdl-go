@@ -718,3 +718,16 @@ func cloneTable(t Table, fresh bool) Table {
 	}
 	return out
 }
+
+// Clone 深拷贝整篇文档。
+func (d Document) Clone() Document {
+	out := d
+	out.Title = d.Title.Clone()
+	out.Icon = clonePtr(d.Icon)
+	if d.Cover != nil {
+		c := *d.Cover
+		out.Cover = &c
+	}
+	out.Blocks = cloneBlockList(d.Blocks)
+	return out
+}
