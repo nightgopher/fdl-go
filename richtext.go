@@ -98,8 +98,7 @@ func floorCharBoundary(s string, i int) int {
 // Slice 取 [start, end) 字节区间的子文本；区间回退到字符边界，过期
 // 偏移不会 panic。
 func (t RichText) Slice(start, end int) RichText {
-	e := floorCharBoundary(t.Text, end)
-	s := min(floorCharBoundary(t.Text, start), e)
+	s, e := t.clamp(start, end)
 	var out RichText
 	for _, sp := range t.Spans() {
 		a, b := max(sp.Start, s), min(sp.End, e)
@@ -108,4 +107,120 @@ func (t RichText) Slice(start, end int) RichText {
 		}
 	}
 	return out
+}
+
+// clamp 把区间夹进文本并回退到字符边界。
+func (t RichText) clamp(start, end int) (int, int) {
+	e := floorCharBoundary(t.Text, end)
+	return min(floorCharBoundary(t.Text, start), e), e
+}
+
+// Append 把 other 追加到末尾。
+func (t *RichText) Append(other *RichText) {
+	off := 0
+	for _, r := range other.Runs {
+		t.Push(other.Text[off:off+r.Len], r.Marks)
+		off += r.Len
+	}
+}
+
+// typingMarks 是新输入文字继承的样式：链接、行内代码和行内对象不延续。
+func typingMarks(m Marks) Marks {
+	m.Link = nil
+	m.Code = false
+	m.Inline = nil
+	return m
+}
+
+// MarksAt 返回在 offset 处输入应继承的样式（取到 offset 结束或包含
+// offset 的 run，偏取左侧，和多数编辑器一致）。
+func (t RichText) MarksAt(offset int) Marks {
+	last := Marks{}
+	for _, sp := range t.Spans() {
+		switch {
+		case sp.Start < offset && offset < sp.End:
+			// 严格在 run 内部：链接和行内代码也延续。
+			m := sp.Marks
+			m.Inline = nil
+			return m
+		case sp.Start < offset && offset == sp.End:
+			return typingMarks(sp.Marks)
+		case sp.Start >= offset:
+			if offset == 0 {
+				return typingMarks(sp.Marks)
+			}
+			return typingMarks(last)
+		}
+		last = sp.Marks
+	}
+	return typingMarks(last)
+}
+
+// Replace 用 ins 替换 [start, end)。
+func (t *RichText) Replace(start, end int, ins *RichText) {
+	out := t.Slice(0, start)
+	out.Append(ins)
+	tail := t.Slice(end, t.Len())
+	out.Append(&tail)
+	*t = out
+}
+
+// InsertPlain 在 offset 处插入带 marks 的纯文本。
+func (t *RichText) InsertPlain(offset int, s string, marks Marks) {
+	var ins RichText
+	ins.Push(s, marks)
+	t.Replace(offset, offset, &ins)
+}
+
+// SplitOff 把 [offset, 末尾) 切走返回，自身只剩前缀。
+func (t *RichText) SplitOff(offset int) RichText {
+	tail := t.Slice(offset, t.Len())
+	head := t.Slice(0, offset)
+	*t = head
+	return tail
+}
+
+// UpdateMarks 对与 [start, end) 重叠的每个 run 的样式应用 f。
+func (t *RichText) UpdateMarks(start, end int, f func(*Marks)) {
+	s, e := t.clamp(start, end)
+	if s >= e {
+		return
+	}
+	var out RichText
+	for _, sp := range t.Spans() {
+		a, b := sp.Start, sp.End
+		ms := min(max(a, s), b)
+		me := max(min(b, e), ms)
+		out.Push(t.Text[a:ms], sp.Marks)
+		m := sp.Marks
+		f(&m)
+		out.Push(t.Text[ms:me], m)
+		out.Push(t.Text[me:b], sp.Marks)
+	}
+	*t = out
+}
+
+// AllMarks 报告与 [start, end) 重叠的每个 run 是否都满足 f（空区间查
+// MarksAt）。
+func (t RichText) AllMarks(start, end int, f func(Marks) bool) bool {
+	if start >= end {
+		return f(t.MarksAt(start))
+	}
+	for _, sp := range t.Spans() {
+		if sp.Start < end && sp.End > start {
+			if !f(sp.Marks) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// Clone 深拷贝（含样式里的指针）。
+func (t RichText) Clone() RichText {
+	runs := make([]Run, len(t.Runs))
+	for i, r := range t.Runs {
+		runs[i] = Run{Len: r.Len, Marks: cloneMarks(r.Marks)}
+	}
+	return RichText{Text: t.Text, Runs: runs}
 }

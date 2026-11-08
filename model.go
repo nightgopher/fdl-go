@@ -625,3 +625,96 @@ func (d *Document) AssetSources() []string {
 	})
 	return out
 }
+
+func clonePtr[T comparable](p *T) *T {
+	if p == nil {
+		return nil
+	}
+	v := *p
+	return &v
+}
+
+func cloneMarks(m Marks) Marks {
+	m.Link = clonePtr(m.Link)
+	m.TextColor = clonePtr(m.TextColor)
+	m.BgColor = clonePtr(m.BgColor)
+	if m.Inline != nil {
+		in := *m.Inline
+		m.Inline = &in
+	}
+	return m
+}
+
+func cloneKindShallow(k BlockKind) BlockKind {
+	switch kk := k.(type) {
+	case Ordered:
+		kk.Seq = clonePtr(kk.Seq)
+		return kk
+	case Code:
+		kk.Caption = clonePtr(kk.Caption)
+		return kk
+	case Callout:
+		kk.Bg = clonePtr(kk.Bg)
+		kk.Border = clonePtr(kk.Border)
+		kk.TextColor = clonePtr(kk.TextColor)
+		return kk
+	case Image:
+		kk.Width = clonePtr(kk.Width)
+		kk.Height = clonePtr(kk.Height)
+		kk.Caption = clonePtr(kk.Caption)
+		kk.Crop = clonePtr(kk.Crop)
+		return kk
+	default:
+		return k // 其余变体是纯值类型
+	}
+}
+
+// Clone 深拷贝块（含子树、表格单元格和样式指针），保留原 id。
+func (b Block) Clone() Block { return cloneBlock(b, false) }
+
+// FreshIDs 深拷贝并给每个块分配新 id（粘贴 / 复制用）。
+func (b Block) FreshIDs() Block { return cloneBlock(b, true) }
+
+func cloneBlock(b Block, fresh bool) Block {
+	if fresh {
+		b.ID = NewBlockID()
+	}
+	b.Text = b.Text.Clone()
+	b.Bg = clonePtr(b.Bg)
+	if len(b.Children) > 0 {
+		ch := make([]Block, len(b.Children))
+		for i := range b.Children {
+			ch[i] = cloneBlock(b.Children[i], fresh)
+		}
+		b.Children = ch
+	}
+	if tb, ok := b.Kind.(Table); ok {
+		b.Kind = cloneTable(tb, fresh)
+	} else {
+		b.Kind = cloneKindShallow(b.Kind)
+	}
+	return b
+}
+
+func cloneTable(t Table, fresh bool) Table {
+	out := Table{HeaderRows: t.HeaderRows, HeaderCol: t.HeaderCol}
+	out.ColWidths = append([]float32(nil), t.ColWidths...)
+	out.Rows = make([][]TableCell, len(t.Rows))
+	for r := range t.Rows {
+		out.Rows[r] = make([]TableCell, len(t.Rows[r]))
+		for c := range t.Rows[r] {
+			cell := t.Rows[r][c]
+			cell.Bg = clonePtr(cell.Bg)
+			cell.Valign = clonePtr(cell.Valign)
+			if len(cell.Blocks) > 0 {
+				bs := make([]Block, len(cell.Blocks))
+				for i := range cell.Blocks {
+					bs[i] = cloneBlock(cell.Blocks[i], fresh)
+				}
+				cell.Blocks = bs
+			}
+			out.Rows[r][c] = cell
+		}
+	}
+	return out
+}
