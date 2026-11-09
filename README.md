@@ -75,9 +75,9 @@ QUIET_MD_HOME=/path/to/lib ~/bin/fdl-web -addr 127.0.0.1:8765
 
 ```sh
 go build -o ~/bin/fdl-sync ./cmd/fdl-sync
-fdl-sync init ~/notes-repo -git   # 建镜像仓库（git init + 全量导出），加 remote 即可
-fdl-sync push ~/notes-repo -git   # 库 → 仓库（git add/commit/push）
-fdl-sync pull ~/notes-repo -git   # 仓库 → 库（git pull 后导入）
+fdl-sync init -git ~/notes-repo   # 建镜像仓库（git init + 全量导出），加 remote 即可
+fdl-sync push -git ~/notes-repo   # 库 → 仓库（git add/commit/push）
+fdl-sync pull -git ~/notes-repo   # 仓库 → 库（git pull 后导入）
 ```
 
 镜像里每篇笔记是一个「标题.md」（图片在 `<名>.assets/` 旁目录），`.fdl-sync.json` 维护映射与内容哈希。GitHub 网页上：改 `.md` → 更新笔记；新增 → 新笔记；删除 → 移入回收站。库侧改名 → 镜像文件 git rename；导出走原位写回，未改的块保持镜像格式。
