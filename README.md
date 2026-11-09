@@ -20,7 +20,24 @@ quiet-md 文档引擎（`fdl_core`，Rust）的 Go 移植：DocxXML 数据模型
 | M2 | 编辑内核（光标/增删改/撤销）+ Markdown ⇄ DocxXML 转换 | 对拍 quiet-md `markdown.rs` / `paste.rs` 的行为；模糊测试守不变量 | ✅ 779eb0b..10235db（fuzz 200 种子×400 步通过） |
 | M3 | MCP server（list/read/search/write_note） | easyagent 挂载后可写入结构化笔记并在 Quiet.md 正常渲染 | ✅ b179511（easyagent sdk/mcp 真实挂载调用通过；Quiet.md 0.1.7 打开写入库，全部块型渲染正常，截图核验） |
 
-下游消费者：easyagent MCP server（`cmd/fdl-mcp`，已验收）、本地 Web 客户端（`cmd/fdl-web`，浏览/搜索/Markdown 编辑）、`fdl` CLI（roundtrip/转换/检查）。基于 MyGo `ui/richtext` 的终端客户端待做（本机暂无 mygo 副本）。
+下游消费者：easyagent MCP server（`cmd/fdl-mcp`，已验收）、本地 Web 客户端（`cmd/fdl-web`，浏览/搜索/Markdown 编辑）、GitHub 同步（`cmd/fdl-sync`，见下）、`fdl` CLI（roundtrip/转换/检查）。基于 MyGo `ui/richtext` 的终端客户端待做（本机暂无 mygo 副本）。
+
+## GitHub 同步
+
+`fdl-sync` 在文档库与一个 Git 仓库（如 GitHub）之间双向同步：镜像仓库里
+每篇笔记是一个「标题.md」（图片在 `<名>.assets/` 旁目录），`.fdl-sync.json`
+记录路径 ↔ 文档 id 与内容哈希，只在变化时写。
+
+```sh
+fdl-sync init ~/notes-repo -git   # 建镜像（git init），全量导出
+fdl-sync push ~/notes-repo -git   # 库 → 镜像 + git add/commit/push
+fdl-sync pull ~/notes-repo -git   # git pull → 镜像 → 库
+```
+
+- GitHub 网页/其他机器上：改 `.md` → 更新笔记；新增 `.md` → 新笔记；
+  删除 → 移入回收站；镜像里的图片收进库 `assets/` 并改库内相对路径。
+- 库侧：改名 → 镜像文件跟着改名（git 识别 rename）；导出走原位写回，
+  未改的块保持自己在镜像里的格式。
 
 ## 边界
 
