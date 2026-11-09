@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>fdl · Quiet.md 笔记</title>
+<style>
+:root { --bg:#fafafa; --panel:#fff; --line:#e5e5ea; --ink:#1f2329; --dim:#8f959e; --accent:#245bdb; }
+* { box-sizing:border-box; }
+body { margin:0; font:15px/1.65 -apple-system,"PingFang SC","Segoe UI",sans-serif; color:var(--ink); background:var(--bg); }
+#app { display:flex; height:100vh; }
+#side { width:290px; flex:none; background:var(--panel); border-right:1px solid var(--line); display:flex; flex-direction:column; }
+#side header { padding:10px 12px; border-bottom:1px solid var(--line); display:flex; gap:8px; }
+#side input[type=search] { flex:1; border:1px solid var(--line); border-radius:6px; padding:6px 10px; font:inherit; outline:none; }
+#side input[type=search]:focus { border-color:var(--accent); }
+button { border:1px solid var(--line); background:var(--panel); border-radius:6px; padding:5px 10px; cursor:pointer; font:inherit; }
+button:hover { border-color:var(--accent); color:var(--accent); }
+button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+#list { overflow:auto; flex:1; }
+.note { padding:10px 12px; border-bottom:1px solid var(--line); cursor:pointer; }
+.note:hover { background:#f2f4ff; }
+.note.active { background:#e8eeff; }
+.note .t { font-weight:600; }
+.note .s { color:var(--dim); font-size:12.5px; margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.note .pin { color:#d83931; margin-right:4px; }
+#main { flex:1; display:flex; flex-direction:column; min-width:0; }
+#bar { padding:10px 20px; border-bottom:1px solid var(--line); background:var(--panel); display:flex; gap:8px; align-items:center; }
+#bar .title { flex:1; border:none; font:600 17px/1.4 inherit; outline:none; background:transparent; }
+#doc { overflow:auto; flex:1; padding:28px 40px; }
+#doc .page { max-width:820px; margin:0 auto; }
+#editorWrap { display:none; flex:1; padding:16px 40px; overflow:auto; }
+#editor { width:100%; min-height:70vh; border:none; outline:none; font:14px/1.7 ui-monospace,Menlo,monospace; background:var(--panel); border-radius:8px; padding:16px; }
+h1.doc-title { font-size:28px; margin:0 0 18px; }
+.indent { margin-left:24px; }
+blockquote { margin:8px 0; padding:6px 14px; border-left:3px solid var(--accent); color:#444; background:#f6f7fa; border-radius:0 6px 6px 0; }
+.callout { display:flex; gap:10px; margin:10px 0; padding:12px 14px; border:1px solid var(--line); border-radius:8px; background:#fff5eb; }
+.callout .emoji { font-size:18px; }
+pre.code { background:#f4f4f5; border-radius:8px; padding:12px 14px; overflow:auto; }
+pre.raw { background:#f4f4f5; border-radius:8px; padding:8px 12px; color:var(--dim); font-size:12.5px; }
+code { background:#f0f1f3; border-radius:4px; padding:1px 5px; }
+pre code { background:none; padding:0; }
+code.math { background:#fdf6e3; }
+table { border-collapse:collapse; margin:10px 0; }
+th,td { border:1px solid var(--line); padding:6px 12px; vertical-align:top; }
+th { background:#f6f7fa; }
+img { max-width:100%; border-radius:8px; }
+.caption { color:var(--dim); font-size:12.5px; text-align:center; margin-top:4px; }
+.grid { display:flex; gap:16px; margin:10px 0; }
+.todo { display:flex; gap:8px; align-items:baseline; margin:3px 0; }
+.todo.done { color:var(--dim); text-decoration:line-through; }
+.file, .file-inline { background:#f0f4ff; border-radius:6px; padding:2px 8px; }
+.countdown { color:var(--dim); }
+.doclink { background:#f0f4ff; border-radius:4px; padding:0 4px; }
+.button { border:1px solid var(--accent); color:var(--accent); border-radius:6px; padding:1px 10px; }
+.reminder { background:#fff7e6; border-radius:6px; padding:1px 8px; }
+#toast { position:fixed; bottom:20px; right:20px; background:#333; color:#fff; border-radius:8px; padding:8px 16px; opacity:0; transition:opacity .3s; }
+#empty { color:var(--dim); text-align:center; margin-top:40vh; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="side">
+    <header>
+      <input type="search" id="q" placeholder="搜索…">
+      <button id="new" class="primary" title="新建笔记">＋</button>
+    </header>
+    <div id="list"></div>
+  </div>
+  <div id="main">
+    <div id="bar">
+      <input class="title" id="title" placeholder="未命名文档" disabled>
+      <button id="edit">编辑</button>
+      <button id="save" class="primary" style="display:none">保存</button>
+      <button id="cancel" style="display:none">取消</button>
+      <button id="del" title="移入回收站">🗑</button>
+    </div>
+    <div id="doc"><div class="page"><div id="empty">选择或新建一篇笔记</div></div></div>
+    <div id="editorWrap"><textarea id="editor" spellcheck="false"></textarea></div>
+  </div>
+</div>
+<div id="toast"></div>
+<script>
+const $ = s => document.querySelector(s);
+let current = null, editing = false;
+
+async function api(path, opts) {
+  const res = await fetch(path, opts);
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}));
+    throw new Error(e.error || res.status);
+  }
+  return res.json();
+}
+function toast(msg) {
+  const t = $('#toast'); t.textContent = msg; t.style.opacity = 1;
+  setTimeout(() => t.style.opacity = 0, 1600);
+}
+
+async function loadList(q) {
+  const rows = q !== undefined ? await api('/api/search?q=' + encodeURIComponent(q))
+                               : await api('/api/notes');
+  const list = $('#list'); list.innerHTML = '';
+  for (const r of rows) {
+    const div = document.createElement('div');
+    div.className = 'note' + (r.id === current ? ' active' : '');
+    div.innerHTML = `<div class="t">${r.pinned ? '<span class="pin">📌</span>' : ''}${r.icon || ''} ${esc(r.title)}</div>` +
+      (r.snippet ? `<div class="s">${esc(r.snippet)}</div>` : '');
+    div.onclick = () => open(r.id);
+    list.appendChild(div);
+  }
+}
+function esc(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
+
+async function open(id) {
+  current = id; editing = false; mode();
+  const n = await api('/api/notes/' + id);
+  $('#title').value = n.title;
+  $('#doc').firstElementChild.innerHTML =
+    `<h1 class="doc-title">${esc((n.icon || '') + ' ' + n.title)}</h1>` + n.html;
+  $('#editor').value = n.markdown;
+  loadList();
+}
+function mode() {
+  $('#doc').style.display = editing ? 'none' : 'block';
+  $('#editorWrap').style.display = editing ? 'block' : 'none';
+  $('#edit').style.display = editing ? 'none' : '';
+  $('#save').style.display = editing ? '' : 'none';
+  $('#cancel').style.display = editing ? '' : 'none';
+  $('#title').disabled = !editing;
+}
+$('#edit').onclick = () => { editing = true; mode(); $('#editor').focus(); };
+$('#cancel').onclick = () => { editing = false; mode(); };
+$('#save').onclick = async () => {
+  try {
+    await api('/api/notes/' + current, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({title: $('#title').value.trim(), markdown: $('#editor').value}),
+    });
+    editing = false; mode();
+    await open(current);
+    toast('已保存（Quiet.md 同步可见）');
+  } catch (e) { toast('保存失败：' + e.message); }
+};
+$('#new').onclick = async () => {
+  const r = await api('/api/notes', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({title: '未命名文档', markdown: ''}),
+  });
+  await loadList(); await open(r.id);
+  editing = true; mode(); $('#editor').focus();
+};
+$('#del').onclick = async () => {
+  if (!current || !confirm('移入回收站？')) return;
+  await api(`/api/notes/${current}/delete`, {method: 'POST'});
+  current = null;
+  $('#doc').firstElementChild.innerHTML = '<div id="empty">选择或新建一篇笔记</div>';
+  await loadList();
+  toast('已移入回收站');
+};
+let deb;
+$('#q').oninput = () => {
+  clearTimeout(deb);
+  deb = setTimeout(() => loadList($('#q').value.trim() || undefined), 200);
+};
+loadList();
+</script>
+</body>
+</html>
