@@ -19,13 +19,25 @@ type Off struct {
 	CodeDivider bool
 	// File：导入整个文件——空行只分块，整行 `![alt](src)` 是图片。
 	File bool
+	// Alt：Markdown 文件按自身编辑——图片保留 alt 文字（作 caption）。
+	Alt bool
 }
 
 // MarkdownToBlocks 把 Markdown 解析成块。
 func MarkdownToBlocks(text string, off Off) []Block {
 	text = strings.ReplaceAll(text, "\r\n", "\n")
 	text = strings.ReplaceAll(text, "\r", "\n")
-	return mdBlocks(strings.Split(strings.TrimRight(text, "\n"), "\n"), off)
+	return mdBlocks(strings.Split(strings.TrimRight(text, "\n"), "\n"), off, nil)
+}
+
+// MarkdownToBlocksWithLines 同 MarkdownToBlocks，并给出每个顶层块来自
+// 的行区间（text 按 \n 切分、去 CR 后的 [start, end)）。
+func MarkdownToBlocksWithLines(text string, off Off) ([]Block, [][2]int) {
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	text = strings.ReplaceAll(text, "\r", "\n")
+	var spans [][2]int
+	blocks := mdBlocks(strings.Split(strings.TrimRight(text, "\n"), "\n"), off, &spans)
+	return blocks, spans
 }
 
 // MarkdownInlineLines 只上行内规则（粘进非空块）：每行一块。
@@ -214,12 +226,21 @@ func mdTodoPrefix(s string) (bool, string, bool) {
 	return false, "", false
 }
 
-func mdBlocks(lines []string, off Off) []Block {
+func mdBlocks(lines []string, off Off, spans *[][2]int) []Block {
 	var out []Block
 	i := 0
 	// 有序项承接上一项的编号。
 	lastList := false
-	for i < len(lines) {
+	// 每轮最多产出一个块：(块数, 起始行) 记录本轮开始时的状态。
+	markOut, markI := 0, 0
+	for {
+		if spans != nil && len(out) > markOut {
+			*spans = append(*spans, [2]int{markI, i})
+		}
+		markOut, markI = len(out), i
+		if i >= len(lines) {
+			break
+		}
 		line := lines[i]
 		// 空行是空段（第一个块之前没有）。
 		if strings.TrimSpace(line) == "" {
@@ -297,7 +318,7 @@ func mdBlocks(lines []string, off Off) []Block {
 					kind, text = Bullet{}, content
 				}
 				b := NewBlock(kind, mdInlineParse(strings.TrimSpace(text)))
-				b.Children = mdBlocks(sub, off)
+				b.Children = mdBlocks(sub, off, nil)
 				out = append(out, b)
 				lastList = true
 				i = j
@@ -339,7 +360,7 @@ func mdBlocks(lines []string, off Off) []Block {
 			}
 			quoteOff := off
 			quoteOff.Quote = true
-			kids := mdBlocks(sub, quoteOff)
+			kids := mdBlocks(sub, quoteOff, nil)
 			if len(kids) > 0 {
 				b := NewBlock(Quote{}, RichText{})
 				b.Children = kids
@@ -353,8 +374,13 @@ func mdBlocks(lines []string, off Off) []Block {
 			continue
 		}
 		if off.File {
-			if src, ok := mdImageLine(body); ok {
-				b := NewBlock(Image{SrcKind: "src", Src: src}, RichText{})
+			if alt, src, ok := mdImageLine(body); ok {
+				var caption *string
+				if off.Alt && alt != "" {
+					c := mdInlineParse(alt).Text
+					caption = &c
+				}
+				b := NewBlock(Image{SrcKind: "src", Src: src, Caption: caption}, RichText{})
 				b.Align = AlignCenter
 				out = append(out, b)
 				i++
@@ -368,19 +394,19 @@ func mdBlocks(lines []string, off Off) []Block {
 	return out
 }
 
-// mdImageLine：整行的 `![alt](src "title")` 的 src。
-func mdImageLine(s string) (string, bool) {
+// mdImageLine：整行的 `![alt](src "title")` 的 alt 和 src。
+func mdImageLine(s string) (string, string, bool) {
 	rest, ok := strings.CutPrefix(s, "![")
 	if !ok {
-		return "", false
+		return "", "", false
 	}
-	_, tail, ok := strings.Cut(rest, "](")
+	alt, tail, ok := strings.Cut(rest, "](")
 	if !ok {
-		return "", false
+		return "", "", false
 	}
 	inner, ok := strings.CutSuffix(tail, ")")
 	if !ok {
-		return "", false
+		return "", "", false
 	}
 	src := inner
 	if k := strings.IndexAny(inner, " \t"); k >= 0 {
@@ -388,9 +414,9 @@ func mdImageLine(s string) (string, bool) {
 	}
 	src = strings.TrimLeft(strings.TrimRight(src, ">"), "<")
 	if src == "" || strings.Contains(inner, ")") {
-		return "", false
+		return "", "", false
 	}
-	return src, true
+	return alt, src, true
 }
 
 // mdQuoteLine：引用行的内容。
@@ -532,6 +558,15 @@ func mdInlineParse(s string) RichText {
 		var prev rune = -1
 		if i > 0 {
 			prev, _ = utf8.DecodeLastRuneInString(s[:i])
+		}
+		// `\*`、`\_`、`\<` …：字符本身（CommonMark），也是 Markdown
+		// 导出写它们的方式。
+		if c == '\\' {
+			if next, ns := utf8.DecodeRuneInString(rest[1:]); isASCIIPunct(next) {
+				plain += string(next)
+				i += 1 + ns
+				continue
+			}
 		}
 		// 代码 span。
 		if c == '`' {
@@ -760,4 +795,8 @@ func repeatF32(v float32, n int) []float32 {
 		out[i] = v
 	}
 	return out
+}
+
+func isASCIIPunct(r rune) bool {
+	return (r >= '!' && r <= '/') || (r >= ':' && r <= '@') || (r >= '[' && r <= '`') || (r >= '{' && r <= '~')
 }

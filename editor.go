@@ -835,6 +835,53 @@ func (c *Core) pushUndo(s snapshot) {
 	}
 }
 
+// ReceiveFileTitle 是文件名变成标题（.md 文件按自身编辑）：当前选区和
+// 全部撤销/重做快照里的标题一起改，标题上的光标夹到字素边界。
+func (c *Core) ReceiveFileTitle(title string) {
+	if c.Doc.Title.Text == title {
+		return
+	}
+	rename := func(doc *Document, sel *Selection) {
+		doc.Title = Plain(title)
+		clamp := func(offset int) int {
+			// 候选是各字素起点加末尾，取不超过 offset 的最大者。
+			if offset >= len(title) {
+				return len(title)
+			}
+			best := 0
+			state := -1
+			pos := 0
+			for pos < len(title) {
+				if pos > offset {
+					break
+				}
+				best = pos
+				cluster, _, _, ns := uniseg.FirstGraphemeClusterInString(title[pos:], state)
+				pos += len(cluster)
+				state = ns
+			}
+			return best
+		}
+		if sel.Anchor.Block == TitleID {
+			sel.Anchor.Offset = clamp(sel.Anchor.Offset)
+		}
+		if sel.Head.Block == TitleID {
+			sel.Head.Offset = clamp(sel.Head.Offset)
+		}
+	}
+	rename(&c.Doc, &c.Sel)
+	for i := range c.undo {
+		rename(&c.undo[i].doc, &c.undo[i].sel)
+		c.undo[i].size = docBytes(&c.undo[i].doc)
+	}
+	for i := range c.redo {
+		rename(&c.redo[i].doc, &c.redo[i].sel)
+		c.redo[i].size = docBytes(&c.redo[i].doc)
+	}
+	c.lastEd = nil
+	c.Generation++
+}
+
 // Undo 撤销一步。
 func (c *Core) Undo() bool {
 	if len(c.undo) == 0 {

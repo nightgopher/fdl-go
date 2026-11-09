@@ -885,3 +885,29 @@ func idEq(got, want []BlockID) bool {
 	}
 	return true
 }
+
+// 对拍 file_title_keeps_current_and_history_grapheme_boundaries。
+func TestFileTitleKeepsCurrentAndHistoryGraphemeBoundaries(t *testing.T) {
+	for _, title := range []string{"中文", "👩‍💻笔记", "e\u0301cole"} {
+		c := coreDoc("<title>abc</title><p>body</p>")
+		c.Sel = Caret(NewPos(TitleID, 1))
+		c.Checkpoint(EditOther)
+		c.ReceiveFileTitle(title)
+		if c.Sel.Head.Offset != 0 {
+			t.Errorf("%q: sel offset = %d, want 0", title, c.Sel.Head.Offset)
+		}
+		if back := c.undo[len(c.undo)-1]; back.sel.Head.Offset != 0 {
+			t.Errorf("%q: undo offset = %d, want 0", title, back.sel.Head.Offset)
+		}
+		c.Backspace()
+		if c.Doc.Title.Text != title {
+			t.Errorf("%q: backspace 后 title = %q", title, c.Doc.Title.Text)
+		}
+		if !c.Undo() {
+			t.Fatal("undo")
+		}
+		if c.Doc.Title.Text != title {
+			t.Errorf("%q: undo 后 title = %q", title, c.Doc.Title.Text)
+		}
+	}
+}
