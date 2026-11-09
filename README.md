@@ -76,11 +76,14 @@ QUIET_MD_HOME=/path/to/lib ~/bin/fdl-web -addr 127.0.0.1:8765
 ```sh
 go build -o ~/bin/fdl-sync ./cmd/fdl-sync
 fdl-sync init -git ~/notes-repo   # 建镜像仓库（git init + 全量导出），加 remote 即可
-fdl-sync push -git ~/notes-repo   # 库 → 仓库（git add/commit/push）
-fdl-sync pull -git ~/notes-repo   # 仓库 → 库（git pull 后导入）
+fdl-sync sync -git ~/notes-repo   # 日常一条龙：先拉（仓库→库）再推（库→仓库）
+fdl-sync push -git ~/notes-repo   # 只推：库 → 仓库（git add/commit/push）
+fdl-sync pull -git ~/notes-repo   # 只拉：仓库 → 库（git pull 后导入）
 ```
 
 镜像里每篇笔记是一个「标题.md」（图片在 `<名>.assets/` 旁目录），`.fdl-sync.json` 维护映射与内容哈希。GitHub 网页上：改 `.md` → 更新笔记；新增 → 新笔记；删除 → 移入回收站。库侧改名 → 镜像文件 git rename；导出走原位写回，未改的块保持镜像格式。
+
+同步按内容哈希跳过没变的一侧，因此单侧改动不会被反向覆盖；**同一篇两边都改**是真冲突，以后跑的方向为准（建议改前先拉、改完就推，不在两边同时改同一篇）。
 
 ### fdl：CLI
 

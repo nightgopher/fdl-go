@@ -203,3 +203,64 @@ func TestSyncAssets(t *testing.T) {
 		}
 	}
 }
+
+// sync = pull + push：一条命令收拢两边（仓库侧与库侧）各自的改动。
+func TestSyncOneCommand(t *testing.T) {
+	st, lib := newLib(t)
+	mirror := t.TempDir()
+	create(t, st, "本地写的", "本地内容\n")
+
+	state := loadState(mirror)
+	if err := push(st, lib, mirror, state); err != nil {
+		t.Fatal(err)
+	}
+	// 两边各改各的（不同篇）：仓库改「本地写的」，库新增一篇。
+	os.WriteFile(filepath.Join(mirror, "本地写的.md"), []byte("仓库改的\n"), 0o644)
+	os.WriteFile(filepath.Join(mirror, "网页来的.md"), []byte("网页内容\n"), 0o644)
+	create(t, st, "库新增", "库内容\n")
+
+	// 一条龙：先拉后推。
+	state = loadState(mirror)
+	if err := pull(st, lib, mirror, state); err != nil {
+		t.Fatal(err)
+	}
+	if err := push(st, lib, mirror, state); err != nil {
+		t.Fatal(err)
+	}
+
+	// 仓库改动进了库。
+	doc, err := st.Load(state.Notes["本地写的.md"].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if doc.PlainText() != "仓库改的" {
+		t.Errorf("本地写的 = %q", doc.PlainText())
+	}
+	// 库新增的进了仓库。
+	if got := read(t, filepath.Join(mirror, "库新增.md")); !strings.Contains(got, "库内容") {
+		t.Errorf("库新增.md = %q", got)
+	}
+	// 网页来的也在库里。
+	entries, _ := st.List()
+	found := 0
+	for _, e := range entries {
+		if e.Title == "网页来的" {
+			found++
+		}
+	}
+	if found != 1 {
+		t.Errorf("网页来的入库 %d 次", found)
+	}
+	// 再跑一遍：稳定，无新变化（sidecar 哈希不动）。
+	before := read(t, filepath.Join(mirror, sidecar))
+	state = loadState(mirror)
+	if err := pull(st, lib, mirror, state); err != nil {
+		t.Fatal(err)
+	}
+	if err := push(st, lib, mirror, state); err != nil {
+		t.Fatal(err)
+	}
+	if after := read(t, filepath.Join(mirror, sidecar)); before != after {
+		t.Errorf("重复 sync 后 sidecar 变了")
+	}
+}

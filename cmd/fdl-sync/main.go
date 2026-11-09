@@ -3,9 +3,10 @@
 //	镜像仓库里每篇笔记是一个「标题.md」，图片在「<名>.assets/」旁目录。
 //	.fdl-sync.json 记录 路径 ↔ 文档 id 与内容哈希，只在变化时写。
 //
-//	fdl-sync init  <镜像目录> [-git]   建镜像（可选 git init）
-//	fdl-sync push  <镜像目录> [-git]   库 → 镜像（可选 git commit+push）
-//	fdl-sync pull  <镜像目录> [-git]   镜像 → 库（可选 git pull --ff-only）
+//	fdl-sync init  [-git] <镜像目录>   建镜像（可选 git init）
+//	fdl-sync sync  [-git] <镜像目录>   一条龙：先拉（仓库→库）再推（库→仓库）
+//	fdl-sync push  [-git] <镜像目录>   库 → 镜像（可选 git commit+push）
+//	fdl-sync pull  [-git] <镜像目录>   镜像 → 库（可选 git pull --ff-only）
 //
 // 文档库取 QUIET_MD_HOME（默认 ~/Documents/Quiet.md）。拉回的内容按
 // Markdown 解析成 DocxXML 入库；镜像里删掉的文件移入回收站。
@@ -81,6 +82,23 @@ func main() {
 	}
 
 	switch cmd {
+	case "sync":
+		st := loadState(mirror)
+		if *git {
+			gitRun(mirror, "pull", "--ff-only")
+		}
+		if err := pull(store, libRoot, mirror, st); err != nil {
+			fatal(err)
+		}
+		if err := push(store, libRoot, mirror, st); err != nil {
+			fatal(err)
+		}
+		if *git && hasChanges(mirror) {
+			gitRun(mirror, "add", "-A")
+			if gitRun(mirror, "commit", "-q", "-m", "sync: from Quiet.md") == nil {
+				gitRun(mirror, "push")
+			}
+		}
 	case "init":
 		if err := os.MkdirAll(mirror, 0o755); err != nil {
 			fatal(err)
@@ -97,11 +115,10 @@ func main() {
 		if err := push(store, libRoot, mirror, st); err != nil {
 			fatal(err)
 		}
-		if *git {
-			if gitRun(mirror, "add", "-A") == nil {
-				if gitRun(mirror, "commit", "-q", "-m", "sync: from Quiet.md") == nil {
-					gitRun(mirror, "push")
-				}
+		if *git && hasChanges(mirror) {
+			gitRun(mirror, "add", "-A")
+			if gitRun(mirror, "commit", "-q", "-m", "sync: from Quiet.md") == nil {
+				gitRun(mirror, "push")
 			}
 		}
 	case "pull":
@@ -118,8 +135,15 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprint(os.Stderr, "用法：fdl-sync init|push|pull <镜像目录> [-git]\n")
+	fmt.Fprint(os.Stderr, "用法：fdl-sync init|sync|push|pull [-git] <镜像目录>\n")
 	os.Exit(2)
+}
+
+// hasChanges 报告镜像仓库有没有待提交的改动（不是 git 仓库则 false）。
+func hasChanges(dir string) bool {
+	cmd := exec.Command("git", "-C", dir, "status", "--porcelain")
+	out, err := cmd.Output()
+	return err == nil && len(out) > 0
 }
 
 func fatal(err error) {
