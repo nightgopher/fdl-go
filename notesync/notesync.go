@@ -136,6 +136,7 @@ func pushOne2(store *fdl.Store, libRoot, mirror string, e fdl.Entry, st *syncSta
 		LibraryRoot: libRoot,
 		Name:        stem,
 		Original:    original,
+		Copied:      copiedFromMirror(libRoot, mirror),
 	}
 	out := fdl.WriteFileWith(&doc, front, opts)
 	// 库内图片/附件复制到镜像旁目录。
@@ -309,6 +310,52 @@ func uniqueName(libRoot, base string, data []byte) string {
 
 // ------------------------------------------------------------------ 杂项
 
+// copiedFromMirror 建立库内 assets 文件 → 镜像已有拷贝 的映射（按内容
+// 匹配），让导出复用已拷过的文件而不是每轮另起 -N 新名。
+func copiedFromMirror(libRoot, mirror string) map[string]string {
+	hashToRel := map[string]string{}
+	des, _ := os.ReadDir(mirror)
+	for _, de := range des {
+		if !de.IsDir() || !strings.HasSuffix(de.Name(), ".assets") {
+			continue
+		}
+		files, _ := os.ReadDir(filepath.Join(mirror, de.Name()))
+		for _, f := range files {
+			if f.IsDir() {
+				continue
+			}
+			p := filepath.Join(mirror, de.Name(), f.Name())
+			if data, err := os.ReadFile(p); err == nil {
+				hashToRel[hashBytes(data)] = pathSlash(de.Name() + "/" + f.Name())
+			}
+		}
+	}
+	if len(hashToRel) == 0 {
+		return nil
+	}
+	copied := map[string]string{}
+	assetsDir := filepath.Join(libRoot, "assets")
+	filepath.WalkDir(assetsDir, func(p string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		if data, err := os.ReadFile(p); err == nil {
+			if rel, ok := hashToRel[hashBytes(data)]; ok {
+				copied[p] = rel
+			}
+		}
+		return nil
+	})
+	return copied
+}
+
+func hashBytes(b []byte) string {
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
+}
+
+func pathSlash(p string) string { return strings.ReplaceAll(p, string(filepath.Separator), "/") }
+
 // safeName 把标题变成文件名（去掉路径分隔符与控制字符）。
 func safeName(title string) string {
 	var b strings.Builder
@@ -418,6 +465,16 @@ func (s *Syncer) Sync() (Stats, error) {
 	a.Removed += b.Removed
 	a.Warnings = append(a.Warnings, b.Warnings...)
 	return a, err
+}
+
+// DebugSync 分别返回两侧统计（诊断用）。
+func (s *Syncer) DebugSync() (pull, push Stats, err error) {
+	pull, err = s.Pull()
+	if err != nil {
+		return
+	}
+	push, err = s.Push()
+	return
 }
 
 // DefaultLibRoot 是文档库默认根目录（fdl.RootDir 的转发，方便调用方只

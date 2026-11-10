@@ -201,6 +201,17 @@ func TestSyncAssets(t *testing.T) {
 	if _, err := s.Push(); err != nil {
 		t.Fatal(err)
 	}
+	// 再 push 两轮：内容复用已拷的文件，不再产生新副本/更新。
+	if stats, err := s.Push(); err != nil || stats.Changed != 0 {
+		t.Errorf("第二轮 push = %+v, %v", stats, err)
+	}
+	if stats, err := s.Push(); err != nil || stats.Changed != 0 {
+		t.Errorf("第三轮 push = %+v, %v", stats, err)
+	}
+	matches0, _ := filepath.Glob(filepath.Join(mirror, "带图.assets", "*"))
+	if len(matches0) != 1 {
+		t.Fatalf("图片副本漂移：%v", matches0)
+	}
 	md := read(t, filepath.Join(mirror, "带图.md"))
 	if !strings.Contains(md, ".assets/") {
 		t.Errorf("图片链接没转旁目录：%q", md)
