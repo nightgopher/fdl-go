@@ -31,10 +31,22 @@
 | GitHub 同步 | 笔记 ⇄ 「标题.md」镜像仓库双向同步，网页上改了也能拉回来 |
 | CLI | `roundtrip` / `xml2md` / `md2xml` / `html2xml` / `info` |
 
-## 快速开始
+## 下载安装
+
+从 [Releases](https://github.com/nightgopher/fdl-go/releases/latest) 下载对应平台的包（macOS arm64/amd64、Linux amd64/arm64），每个包含全部四个工具：
 
 ```sh
-go build ./...   # Go 1.27
+curl -LO https://github.com/nightgopher/fdl-go/releases/latest/download/fdl-go-v0.1.0-darwin-arm64.tar.gz
+tar xzf fdl-go-v0.1.0-darwin-arm64.tar.gz    # 得到 fdl / fdl-mcp / fdl-web / fdl-sync
+cd fdl-go-v0.1.0-darwin-arm64 && cp fdl* ~/bin/ 2>/dev/null || sudo cp fdl* /usr/local/bin/
+fdl -version
+```
+
+或从源码（Go 1.27）：
+
+```sh
+go install github.com/nightgopher/fdl-go/cmd/fdl@latest      # 各工具同理
+# 或 clone 后 make：go build ./...
 go test ./...    # 100+ 项测试（含确定性 fuzz）
 ```
 

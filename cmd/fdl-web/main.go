@@ -26,11 +26,16 @@ import (
 var staticFS embed.FS
 
 func main() {
+	version := flag.Bool("version", false, "打印版本号")
 	addr := flag.String("addr", "127.0.0.1:8765", "监听地址")
 	root := flag.String("root", "", "文档库目录（默认 QUIET_MD_HOME 或 ~/Documents/Quiet.md）")
 	syncMirror := flag.String("sync", "", "启用同步：Git 镜像仓库目录（工具栏出同步按钮，保存后自动同步）")
 	syncGit := flag.Bool("sync-git", true, "同步顺带 git 操作（pull/add/commit/push）")
 	flag.Parse()
+	if *version {
+		fmt.Println(fdl.Version)
+		return
+	}
 	if *root == "" {
 		*root = os.Getenv("QUIET_MD_HOME")
 	}

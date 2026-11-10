@@ -40,6 +40,10 @@ func fatal(err error) {
 }
 
 func main() {
+	if len(os.Args) == 2 && (os.Args[1] == "-version" || os.Args[1] == "--version") {
+		fmt.Println(fdl.Version)
+		return
+	}
 	if len(os.Args) < 2 {
 		usage()
 	}

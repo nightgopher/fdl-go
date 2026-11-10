@@ -7,6 +7,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"os"
 	"strings"
@@ -18,6 +19,12 @@ import (
 )
 
 func main() {
+	version := flag.Bool("version", false, "打印版本号")
+	flag.Parse()
+	if *version {
+		fmt.Println(fdl.Version)
+		return
+	}
 	root := os.Getenv("QUIET_MD_HOME")
 	if root == "" {
 		root = fdl.RootDir()
