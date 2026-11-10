@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	fdl "github.com/nightgopher/fdl-go"
+	"github.com/nightgopher/fdl-go/notesync"
 )
 
 func TestWebAPI(t *testing.T) {
@@ -15,7 +18,7 @@ func TestWebAPI(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := httptest.NewServer(newMux(st, st.Root()))
+	srv := httptest.NewServer(newMux(st, st.Root(), nil))
 	defer srv.Close()
 
 	post := func(path, body string) map[string]any {
@@ -120,5 +123,50 @@ func TestWebAPI(t *testing.T) {
 	res.Body.Close()
 	if !strings.Contains(string(page[:n]), "fdl") && !strings.Contains(string(page[:n]), "<html") {
 		t.Errorf("首页 = %q", string(page[:n]))
+	}
+}
+
+// 同步按钮链路：-sync 启用后 POST /api/sync 执行双向同步。
+func TestWebSync(t *testing.T) {
+	lib := t.TempDir()
+	st, err := fdl.OpenStoreAt(lib)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mirror := t.TempDir()
+	syncer, err := notesync.New(lib, mirror, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(newMux(st, lib, syncer))
+	defer srv.Close()
+
+	// 未启用时 health.sync=false；这里已启用，应为 true。
+	res, _ := http.Get(srv.URL + "/api/health")
+	var h map[string]any
+	json.NewDecoder(res.Body).Decode(&h)
+	res.Body.Close()
+	if h["sync"] != true {
+		t.Fatalf("health = %v", h)
+	}
+
+	// 建一篇笔记 → POST /api/sync → 镜像里出现 md。
+	http.Post(srv.URL+"/api/notes", "application/json",
+		strings.NewReader(`{"title":"同步按钮","markdown":"按钮按一下\n"}`))
+	resp, err := http.Post(srv.URL+"/api/sync", "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != 200 {
+		t.Fatalf("sync = %d", resp.StatusCode)
+	}
+	var out map[string]any
+	json.NewDecoder(resp.Body).Decode(&out)
+	resp.Body.Close()
+	if out["created"] != float64(1) {
+		t.Errorf("sync out = %v", out)
+	}
+	if _, err := os.Stat(filepath.Join(mirror, "同步按钮.md")); err != nil {
+		t.Errorf("镜像里没有：%v", err)
 	}
 }

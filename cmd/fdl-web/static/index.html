@@ -70,6 +70,7 @@ img { max-width:100%; border-radius:8px; }
     <div id="bar">
       <input class="title" id="title" placeholder="未命名文档" disabled>
       <button id="edit">编辑</button>
+      <button id="sync" title="与 GitHub 镜像仓库双向同步" style="display:none">⟳ 同步</button>
       <button id="save" class="primary" style="display:none">保存</button>
       <button id="cancel" style="display:none">取消</button>
       <button id="del" title="移入回收站">🗑</button>
@@ -81,7 +82,7 @@ img { max-width:100%; border-radius:8px; }
 <div id="toast"></div>
 <script>
 const $ = s => document.querySelector(s);
-let current = null, editing = false;
+let current = null, editing = false, syncOn = false;
 
 async function api(path, opts) {
   const res = await fetch(path, opts);
@@ -110,6 +111,31 @@ async function loadList(q) {
   }
 }
 function esc(s) { const d = document.createElement('div'); d.textContent = s ?? ''; return d.innerHTML; }
+
+async function initSync() {
+  try {
+    const h = await api('/api/health');
+    syncOn = !!h.sync;
+    if (syncOn) {
+      $('#sync').style.display = '';
+      const st = await api('/api/sync/status');
+      if (st.last) toast(st.last);
+    }
+  } catch (e) { /* health 挂了页面也用不了 */ }
+}
+$('#sync').onclick = async () => {
+  $('#sync').disabled = true;
+  try {
+    const r = await api('/api/sync', {method: 'POST'});
+    toast(`同步完成：更新 ${r.changed}、新建 ${r.created}、删除 ${r.removed}` + (r.warnings?.length ? '；' + r.warnings.join('；') : ''));
+    await loadList($('#q').value.trim() || undefined);
+    if (current && !editing) await open(current);
+  } catch (e) {
+    toast('同步失败：' + e.message);
+  } finally {
+    $('#sync').disabled = false;
+  }
+};
 
 async function open(id) {
   current = id; editing = false; mode();
@@ -164,6 +190,7 @@ $('#q').oninput = () => {
   clearTimeout(deb);
   deb = setTimeout(() => loadList($('#q').value.trim() || undefined), 200);
 };
+initSync();
 loadList();
 </script>
 </body>

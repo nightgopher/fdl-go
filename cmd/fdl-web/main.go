@@ -14,11 +14,12 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	fdl "github.com/nightgopher/fdl-go"
+	"github.com/nightgopher/fdl-go/notesync"
 )
 
 //go:embed static
@@ -27,6 +28,8 @@ var staticFS embed.FS
 func main() {
 	addr := flag.String("addr", "127.0.0.1:8765", "监听地址")
 	root := flag.String("root", "", "文档库目录（默认 QUIET_MD_HOME 或 ~/Documents/Quiet.md）")
+	syncMirror := flag.String("sync", "", "启用同步：Git 镜像仓库目录（工具栏出同步按钮，保存后自动同步）")
+	syncGit := flag.Bool("sync-git", true, "同步顺带 git 操作（pull/add/commit/push）")
 	flag.Parse()
 	if *root == "" {
 		*root = os.Getenv("QUIET_MD_HOME")
@@ -42,15 +45,55 @@ func main() {
 	for _, w := range st.Warnings {
 		fmt.Fprintf(os.Stderr, "fdl-web: %s\n", w)
 	}
+	var syncer *notesync.Syncer
+	if *syncMirror != "" {
+		syncer, err = notesync.New(*root, *syncMirror, *syncGit)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "fdl-web: 同步未启用：%v\n", err)
+			syncer = nil
+		} else {
+			fmt.Printf("fdl-web: 同步已启用 ⇄ %s\n", *syncMirror)
+		}
+	}
 	fmt.Printf("fdl-web: 文档库 %s → http://%s\n", *root, *addr)
-	if err := http.ListenAndServe(*addr, newMux(st, *root)); err != nil {
+	if err := http.ListenAndServe(*addr, newMux(st, *root, syncer)); err != nil {
 		fmt.Fprintf(os.Stderr, "fdl-web: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func newMux(st *fdl.Store, root string) http.Handler {
+// autoSync 在改动后自动同步（防抖合并短时间内的连续保存）。
+type autoSync struct {
+	syncer *notesync.Syncer
+	mu     sync.Mutex
+	timer  *time.Timer
+	last   string
+}
+
+func (a *autoSync) schedule() {
+	if a == nil || a.syncer == nil {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.timer != nil {
+		a.timer.Stop()
+	}
+	a.timer = time.AfterFunc(2*time.Second, func() {
+		stats, err := a.syncer.Sync()
+		a.mu.Lock()
+		if err != nil {
+			a.last = "自动同步失败：" + err.Error()
+		} else {
+			a.last = fmt.Sprintf("自动同步：更新 %d、新建 %d、删除 %d", stats.Changed, stats.Created, stats.Removed)
+		}
+		a.mu.Unlock()
+	})
+}
+
+func newMux(st *fdl.Store, root string, syncer *notesync.Syncer) http.Handler {
 	var mu sync.Mutex
+	auto := &autoSync{syncer: syncer}
 	mux := http.NewServeMux()
 
 	// 页面与静态资源。
@@ -179,6 +222,7 @@ func newMux(st *fdl.Store, root string) http.Handler {
 			fail(w, err)
 			return
 		}
+		auto.schedule()
 		writeJSON(w, map[string]any{"id": id})
 	})
 
@@ -207,6 +251,7 @@ func newMux(st *fdl.Store, root string) http.Handler {
 			fail(w, err)
 			return
 		}
+		auto.schedule()
 		writeJSON(w, map[string]any{"id": id, "ok": true})
 	})
 
@@ -218,14 +263,42 @@ func newMux(st *fdl.Store, root string) http.Handler {
 			fail(w, err)
 			return
 		}
+		auto.schedule()
 		writeJSON(w, map[string]any{"ok": true})
 	})
 
 	mux.HandleFunc("GET /api/health", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, map[string]any{"ok": true, "root": root})
+		writeJSON(w, map[string]any{"ok": true, "root": root, "sync": syncer != nil})
 	})
 
-	_ = strconv.Itoa
+	// 手动同步按钮。
+	mux.HandleFunc("POST /api/sync", func(w http.ResponseWriter, r *http.Request) {
+		if syncer == nil {
+			fail(w, fmt.Errorf("同步未启用（fdl-web -sync <镜像目录>）"))
+			return
+		}
+		stats, err := syncer.Sync()
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		auto.mu.Lock()
+		auto.last = ""
+		auto.mu.Unlock()
+		writeJSON(w, map[string]any{
+			"changed": stats.Changed, "created": stats.Created, "removed": stats.Removed,
+			"warnings": stats.Warnings,
+		})
+	})
+
+	// 上次自动同步的结果（页面加载时显示一次）。
+	mux.HandleFunc("GET /api/sync/status", func(w http.ResponseWriter, r *http.Request) {
+		auto.mu.Lock()
+		last := auto.last
+		auto.mu.Unlock()
+		writeJSON(w, map[string]any{"enabled": syncer != nil, "last": last})
+	})
+
 	return logAll(mux)
 }
 

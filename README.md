@@ -69,6 +69,9 @@ AI 即可调用 `list` / `read` / `search` / `write_note`（正文按 Markdown �
 go build -o ~/bin/fdl-web ./cmd/fdl-web
 QUIET_MD_HOME=/path/to/lib ~/bin/fdl-web -addr 127.0.0.1:8765
 # 打开 http://127.0.0.1:8765
+
+# 带同步（推荐）：工具栏出现「⟳ 同步」按钮，保存/新建/删除后自动同步
+~/bin/fdl-web -addr 127.0.0.1:8765 -sync ~/notes-repo
 ```
 
 ### fdl-sync：GitHub 同步
