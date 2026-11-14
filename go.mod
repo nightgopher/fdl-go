@@ -3,7 +3,7 @@ module github.com/nightgopher/fdl-go
 go 1.27.3
 
 require (
-	github.com/egoist/mygo v0.0.0
+	github.com/egoist/mygo v0.9.0
 	github.com/google/uuid v1.6.0
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	github.com/rivo/uniseg v0.4.7
@@ -24,5 +24,3 @@ require (
 	golang.org/x/text v0.43.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 )
-
-replace github.com/egoist/mygo => /Users/weijian/Projects/third-party/mygo

@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 
 VERSION="${1:?用法：release.sh <版本号如 v0.1.0>}"
 OUT="${2:-dist}"
-CMDS=(fdl fdl-mcp fdl-web fdl-sync)
+CMDS=(fdl fdl-mcp fdl-web fdl-sync fdl-app)
 TARGETS=(darwin-arm64 darwin-amd64 linux-amd64 linux-arm64)
 LDFLAGS="-s -w -X github.com/nightgopher/fdl-go.Version=${VERSION}"
 

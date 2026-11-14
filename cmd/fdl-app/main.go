@@ -66,7 +66,16 @@ func (a *app) open(id string) {
 	}
 	a.store.Touch(id)
 	a.cur = &note{id: id, opened: time.Now()}
-	a.cur.doc = richtext.NewDocument(fdlToRichText(&doc))
+	// 文档标题作为首段 H1 进编辑器（保存时剥离回去），标题因此可编辑。
+	text := fdlToRichText(&doc)
+	if title := strings.TrimSpace(doc.Title.Text); title != "" {
+		paras := []richtext.Paragraph{{Style: richtext.ParagraphStyle{Heading: 1}, Runs: []richtext.Run{{Text: title}}}}
+		for _, p := range text.Paragraphs() {
+			paras = append(paras, p)
+		}
+		text = richtext.TextOf(paras...)
+	}
+	a.cur.doc = richtext.NewDocument(text)
 	a.dirty = false
 }
 
@@ -125,6 +134,22 @@ func (a *app) save() {
 	}
 }
 
+// del 把笔记移入回收站并清空编辑区。
+func (a *app) del(id string) {
+	if a.cur != nil && a.cur.id == id {
+		a.cur = nil
+		a.dirty = false
+	}
+	if err := a.store.Delete(id); err != nil {
+		log.Println("fdl-app: 删除失败：", err)
+	}
+	a.reload()
+	if len(a.entries) > 0 {
+		a.open(a.entries[0].id)
+		a.selected = a.entries[0].id
+	}
+}
+
 func (a *app) view(c *ui.Context) {
 	t := c.Theme()
 	if c.Shortcut(ui.Cmd, ui.KeyN) {
@@ -132,6 +157,9 @@ func (a *app) view(c *ui.Context) {
 	}
 	if c.Shortcut(ui.Cmd, ui.KeyS) {
 		a.save()
+	}
+	if a.cur != nil && c.Shortcut(ui.Cmd, ui.KeyBackspace) {
+		a.del(a.cur.id)
 	}
 	if a.cur == nil && len(a.entries) > 0 {
 		a.open(a.entries[0].id)
@@ -142,8 +170,13 @@ func (a *app) view(c *ui.Context) {
 		ui.Column(c).Width(240).Shrink(0).PaddingY(12).Gap(8).Background(t.Surface).Children(func() {
 			ui.Row(c).Padding(0, 16).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, "Quiet.md").Bold().Grow(1)
-				if ui.Button(c, "＋").Label("新建笔记").Clicked() {
+				if ui.Button(c, "＋").Label("新建笔记（⌘N）").Clicked() {
 					a.add()
+				}
+			})
+			ui.Row(c).Padding(0, 16).Children(func() {
+				if ui.Button(c, "删除当前笔记").Clicked() && a.cur != nil {
+					a.del(a.cur.id)
 				}
 			})
 			ui.Sidebar(c, &a.selected, func() {
