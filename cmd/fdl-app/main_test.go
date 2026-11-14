@@ -3,6 +3,7 @@ package main
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/egoist/mygo/ui/richtext"
 
@@ -66,5 +67,41 @@ func TestSwitchNotes(t *testing.T) {
 	a.syncSelection()
 	if a.cur.id != id2 {
 		t.Errorf("过滤态切换失败")
+	}
+}
+
+// 置顶分组与最近打开排序（对齐 quiet.md 侧栏顺序）。
+func TestSortedSidebar(t *testing.T) {
+	root := t.TempDir()
+	store, _ := fdl.OpenStoreAt(root)
+	a := &app{store: store}
+	// 三篇：旧打开的、新打开的、置顶的。
+	d := fdl.NewDocument()
+	d.Title = fdl.Plain("旧")
+	old, _ := store.CreateFrom(&d)
+	d = fdl.NewDocument()
+	d.Title = fdl.Plain("新")
+	fresh, _ := store.CreateFrom(&d)
+	d = fdl.NewDocument()
+	d.Title = fdl.Plain("顶")
+	pin, _ := store.CreateFrom(&d)
+	store.Touch(old)
+	// 让 fresh 更晚打开。
+	time.Sleep(1100 * time.Millisecond)
+	store.Touch(fresh)
+	store.SetPinned(pin, true)
+	a.reload()
+	pinned, others := a.sorted()
+	if len(pinned) != 1 || pinned[0].id != pin {
+		t.Errorf("置顶组 = %+v", pinned)
+	}
+	if len(others) != 2 || others[0].id != fresh || others[1].id != old {
+		t.Errorf("其余顺序 = %+v（want 新→旧）", others)
+	}
+	// 置顶切换。
+	a.cur = &note{id: pin}
+	a.togglePin()
+	if _, others2 := a.sorted(); len(others2) != 3 {
+		t.Errorf("取消置顶后其余 = %d", len(others2))
 	}
 }

@@ -668,3 +668,17 @@ func ImagePath(src string) (string, bool) {
 	}
 	return "", false
 }
+
+// SetPinned 置顶/取消置顶。
+func (st *Store) SetPinned(id string, pinned bool) error {
+	release, err := st.beginWrite()
+	if err != nil {
+		return err
+	}
+	defer release()
+	if m, ok := st.index[id]; ok {
+		m.Pinned = pinned
+		st.index[id] = m
+	}
+	return st.saveIndex()
+}

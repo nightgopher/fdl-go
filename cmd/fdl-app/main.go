@@ -9,6 +9,7 @@ package main
 import (
 	"log"
 	"os"
+	"sort"
 	"strings"
 	"time"
 	"unicode"
@@ -22,9 +23,12 @@ import (
 
 // entry 是列表里的一行。
 type entry struct {
-	id    string
-	title string
-	body  string // 搜索用纯文本
+	id       string
+	title    string
+	body     string // 搜索用纯文本
+	pinned   bool
+	opened   uint64
+	modified uint64
 }
 
 // note 是打开的笔记：库里的文档 + 编辑器里的文档。
@@ -57,8 +61,32 @@ func (a *app) reload() {
 		if e.Meta.Folder != nil {
 			continue
 		}
-		a.entries = append(a.entries, entry{id: e.ID, title: fdl.DisplayTitle(e.Title), body: e.Body})
+		a.entries = append(a.entries, entry{
+			id: e.ID, title: fdl.DisplayTitle(e.Title), body: e.Body,
+			pinned: e.Meta.Pinned, opened: e.Meta.Opened, modified: e.Meta.Modified,
+		})
 	}
+}
+
+// sorted 是过滤后的列表，按 quiet.md 的侧栏顺序：置顶在前，其余最近
+// 打开的在前（未打开过的按修改时间）。
+func (a *app) sorted() (pinned, others []entry) {
+	for _, e := range a.filtered() {
+		if e.pinned {
+			pinned = append(pinned, e)
+		} else {
+			others = append(others, e)
+		}
+	}
+	key := func(e entry) uint64 {
+		if e.opened > 0 {
+			return e.opened
+		}
+		return e.modified
+	}
+	sort.SliceStable(pinned, func(i, j int) bool { return key(pinned[i]) > key(pinned[j]) })
+	sort.SliceStable(others, func(i, j int) bool { return key(others[i]) > key(others[j]) })
+	return
 }
 
 // filtered 是按搜索词过滤后的列表。
@@ -84,6 +112,8 @@ func (a *app) open(id string) {
 		return
 	}
 	a.store.Touch(id)
+	a.reload()
+	a.lastReload = time.Now()
 	a.cur = &note{id: id, opened: time.Now()}
 	// 文档标题作为首段 H1 进编辑器（保存时剥离回去），标题因此可编辑。
 	text := fdlToRichText(&doc)
@@ -153,6 +183,25 @@ func (a *app) save() {
 	}
 }
 
+// togglePin 置顶/取消置顶当前笔记。
+func (a *app) togglePin() {
+	if a.cur == nil {
+		return
+	}
+	pinned := false
+	for _, e := range a.entries {
+		if e.id == a.cur.id {
+			pinned = e.pinned
+		}
+	}
+	if err := a.store.SetPinned(a.cur.id, !pinned); err != nil {
+		log.Println("fdl-app: 置顶失败：", err)
+		return
+	}
+	a.reload()
+	a.lastReload = time.Now()
+}
+
 // syncSelection 切换笔记：选中变了先保存当前，再打开新选的。
 func (a *app) syncSelection() {
 	if a.selected != "" && (a.cur == nil || a.selected != a.cur.id) {
@@ -194,6 +243,9 @@ func (a *app) view(c *ui.Context) {
 	if a.cur != nil && c.Shortcut(ui.Cmd, ui.KeyBackspace) {
 		a.del(a.cur.id)
 	}
+	if a.cur != nil && c.Shortcut(ui.Cmd, ui.KeyP) {
+		a.togglePin()
+	}
 	if a.cur == nil && len(a.entries) > 0 {
 		a.open(a.entries[0].id)
 		a.selected = a.entries[0].id
@@ -210,15 +262,31 @@ func (a *app) view(c *ui.Context) {
 			ui.Row(c).Padding(0, 12).Children(func() {
 				ui.TextInput(c, &a.query).Placeholder("搜索…").Grow(1).Label("搜索笔记")
 			})
-			ui.Row(c).Padding(0, 4).Children(func() {
-				if ui.Button(c, "删除当前笔记").Clicked() && a.cur != nil {
+			ui.Row(c).Padding(0, 4).Gap(6).Children(func() {
+				pinLabel := "置顶 ⌘P"
+				for _, e := range a.entries {
+					if e.id == a.cur.id && e.pinned {
+						pinLabel = "取消置顶 ⌘P"
+					}
+				}
+				if ui.Button(c, pinLabel).Clicked() && a.cur != nil {
+					a.togglePin()
+				}
+				if ui.Button(c, "删除 ⌘⌫").Clicked() && a.cur != nil {
 					a.del(a.cur.id)
 				}
 			})
 			ui.Sidebar(c, &a.selected, func() {
-				for _, e := range a.filtered() {
-					ui.SidebarItem(c.Key(e.id), e.id, nil, e.title)
+				pinned, others := a.sorted()
+				items := func(list []entry) {
+					for _, e := range list {
+						ui.SidebarItem(c.Key(e.id), e.id, nil, e.title)
+					}
 				}
+				if len(pinned) > 0 {
+					ui.SidebarSection(c, "置顶", nil, func() { items(pinned) })
+				}
+				ui.SidebarSection(c, "全部笔记", nil, func() { items(others) })
 			}).Grow(1).Label("笔记")
 		})
 		// 正文：工具栏 + 编辑器 + 状态行。
