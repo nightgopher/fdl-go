@@ -37,9 +37,9 @@
 从 [Releases](https://github.com/nightgopher/fdl-go/releases/latest) 下载对应平台的包（macOS arm64/amd64、Linux amd64/arm64），每个包含全部四个工具：
 
 ```sh
-curl -LO https://github.com/nightgopher/fdl-go/releases/latest/download/fdl-go-v0.1.0-darwin-arm64.tar.gz
-tar xzf fdl-go-v0.1.0-darwin-arm64.tar.gz    # 得到 fdl / fdl-mcp / fdl-web / fdl-sync
-cd fdl-go-v0.1.0-darwin-arm64 && cp fdl* ~/bin/ 2>/dev/null || sudo cp fdl* /usr/local/bin/
+curl -LO https://github.com/nightgopher/fdl-go/releases/latest/download/fdl-go-v0.2.0-darwin-arm64.tar.gz
+tar xzf fdl-go-v0.2.0-darwin-arm64.tar.gz    # 得到 fdl / fdl-mcp / fdl-web / fdl-sync
+cd fdl-go-v0.2.0-darwin-arm64 && cp fdl* ~/bin/ 2>/dev/null || sudo cp fdl* /usr/local/bin/
 fdl -version
 ```
 
