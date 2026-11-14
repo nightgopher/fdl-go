@@ -47,8 +47,8 @@ func TestRoundTripThroughEditor(t *testing.T) {
 			t.Errorf("缺少 %s:\n%s", want, out)
 		}
 	}
-	// 块结构保留（已知偏差：编辑器列表从 1 编号、代码块语言不保留）。
-	for _, want := range []string{"<h1>标题一</h1>", "<li>一\n    <ul>", "<li>嵌</li>", `<li>三</li>`, `<checkbox done="true">完</checkbox>`, "<blockquote>\n  <p>引</p>\n</blockquote>", "fn x()", "<hr/>", "<p>结尾</p>"} {
+	// 块结构保留（已知偏差：编辑器列表从 1 编号）。代码块语言经段落 ID 保留。
+	for _, want := range []string{"<h1>标题一</h1>", "<li>一\n    <ul>", "<li>嵌</li>", `<li>三</li>`, `<checkbox done="true">完</checkbox>`, "<blockquote>\n  <p>引</p>\n</blockquote>", `lang="rust"`, "fn x()", "<hr/>", "<p>结尾</p>"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("缺少 %s:\n%s", want, out)
 		}

@@ -40,6 +40,9 @@ func fdlToRichText(doc *fdl.Document) richtext.Text {
 				p.Style.Checked = k.Done
 			case fdl.Code:
 				p.Style.CodeBlock = true
+				if k.Lang != "" && k.Lang != "Plain Text" {
+					p.Style.ID = "fdl-lang:" + k.Lang
+				}
 				p.Runs = []richtext.Run{{Text: b.Text.Text}}
 				paras = append(paras, p)
 				walk(b.Children, depth, quote)
@@ -212,11 +215,15 @@ func richToFdl(t richtext.Text) []fdl.Block {
 			continue
 		}
 		if s.CodeBlock {
+			lang := "plaintext"
+			if l, ok := strings.CutPrefix(s.ID, "fdl-lang:"); ok && l != "" {
+				lang = l
+			}
 			var sb strings.Builder
 			for _, r := range para.Runs {
 				sb.WriteString(r.Text)
 			}
-			items = append(items, convItem{s.Indent, false, fdl.NewBlock(fdl.Code{Lang: "plaintext"}, fdl.Plain(sb.String()))})
+			items = append(items, convItem{s.Indent, false, fdl.NewBlock(fdl.Code{Lang: lang}, fdl.Plain(sb.String()))})
 			continue
 		}
 		var rt fdl.RichText

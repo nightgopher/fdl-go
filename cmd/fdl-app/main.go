@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -23,6 +24,7 @@ import (
 type entry struct {
 	id    string
 	title string
+	body  string // 搜索用纯文本
 }
 
 // note 是打开的笔记：库里的文档 + 编辑器里的文档。
@@ -34,12 +36,14 @@ type note struct {
 }
 
 type app struct {
-	store    *fdl.Store
-	entries  []entry
-	cur      *note
-	selected string
-	next     int // 新笔记的临时序号
-	dirty    bool
+	store      *fdl.Store
+	entries    []entry
+	cur        *note
+	selected   string
+	next       int // 新笔记的临时序号
+	dirty      bool
+	query      string // 搜索词
+	lastReload time.Time
 }
 
 func (a *app) reload() {
@@ -53,8 +57,23 @@ func (a *app) reload() {
 		if e.Meta.Folder != nil {
 			continue
 		}
-		a.entries = append(a.entries, entry{id: e.ID, title: fdl.DisplayTitle(e.Title)})
+		a.entries = append(a.entries, entry{id: e.ID, title: fdl.DisplayTitle(e.Title), body: e.Body})
 	}
+}
+
+// filtered 是按搜索词过滤后的列表。
+func (a *app) filtered() []entry {
+	q := strings.ToLower(strings.TrimSpace(a.query))
+	if q == "" {
+		return a.entries
+	}
+	var out []entry
+	for _, e := range a.entries {
+		if strings.Contains(strings.ToLower(e.title), q) || strings.Contains(strings.ToLower(e.body), q) {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // open 打开一篇笔记。
@@ -152,6 +171,11 @@ func (a *app) del(id string) {
 
 func (a *app) view(c *ui.Context) {
 	t := c.Theme()
+	// 外部改动（Quiet.md / fdl-sync / MCP 写库）节流刷新列表；编辑中不动。
+	if !a.dirty && time.Since(a.lastReload) > 5*time.Second {
+		a.reload()
+		a.lastReload = time.Now()
+	}
 	if c.Shortcut(ui.Cmd, ui.KeyN) {
 		a.add()
 	}
@@ -174,13 +198,16 @@ func (a *app) view(c *ui.Context) {
 					a.add()
 				}
 			})
-			ui.Row(c).Padding(0, 16).Children(func() {
+			ui.Row(c).Padding(0, 12).Children(func() {
+				ui.TextInput(c, &a.query).Placeholder("搜索…").Grow(1).Label("搜索笔记")
+			})
+			ui.Row(c).Padding(0, 4).Children(func() {
 				if ui.Button(c, "删除当前笔记").Clicked() && a.cur != nil {
 					a.del(a.cur.id)
 				}
 			})
 			ui.Sidebar(c, &a.selected, func() {
-				for _, e := range a.entries {
+				for _, e := range a.filtered() {
 					ui.SidebarItem(c.Key(e.id), e.id, nil, e.title)
 				}
 			}).Grow(1).Label("笔记")
@@ -195,6 +222,16 @@ func (a *app) view(c *ui.Context) {
 			changed := richtext.Editor(c.Key(a.cur.id), a.cur.doc, richtext.EditorOptions{
 				Label:       "笔记",
 				Placeholder: "标题…",
+				// 行内对象（公式/附件/提及）的样式：灰底等宽小胶囊。
+				TagStyle: func(tag string, s *ui.Span) {
+					s.Background = t.Surface
+					s.Color = t.TextMuted
+					s.Radius = 4
+					s.PaddingX, s.PaddingY = 4, 1
+					if strings.HasPrefix(tag, "<latex") {
+						s.Color = t.Accent
+					}
+				},
 			}).Grow(1).Changed()
 			if changed {
 				a.dirty = true
@@ -203,7 +240,8 @@ func (a *app) view(c *ui.Context) {
 			if !a.dirty {
 				status = "已保存"
 			}
-			ui.Textf(c, "%s · fdl-go %s", status, fdl.Version).FontSize(12).TextColor(t.TextMuted)
+			words := len(strings.FieldsFunc(a.cur.doc.Text().PlainText(), func(r rune) bool { return unicode.IsSpace(r) }))
+			ui.Textf(c, "%s · %d 字 · fdl-go %s", status, words, fdl.Version).FontSize(12).TextColor(t.TextMuted)
 		})
 	})
 }
