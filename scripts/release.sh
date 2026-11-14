@@ -10,6 +10,7 @@ TARGETS=(darwin-arm64 darwin-amd64 linux-amd64 linux-arm64)
 LDFLAGS="-s -w -X github.com/nightgopher/fdl-go.Version=${VERSION}"
 
 rm -rf "$OUT"; mkdir -p "$OUT"
+DMG_ARCHS="darwin-arm64 darwin-amd64"
 for target in "${TARGETS[@]}"; do
     os="${target%-*}"; arch="${target#*-}"
     dir="$OUT/fdl-go-${VERSION}-${target}"
@@ -23,5 +24,39 @@ for target in "${TARGETS[@]}"; do
     echo "✓ $dir.tar.gz"
 done
 (cd "$OUT" && shasum -a 256 *.tar.gz > checksums.txt)
+# macOS DMG：fdl.app（拖入 Applications 的卷）。
+for target in $DMG_ARCHS; do
+    arch="${target#*-}"
+    app="$OUT/fdl.app"
+    rm -rf "$app"
+    mkdir -p "$app/Contents/MacOS"
+    cp "$OUT/.tmp-$target/fdl-app" "$app/Contents/MacOS/fdl-app" 2>/dev/null || \
+        CGO_ENABLED=0 GOOS=darwin GOARCH="$arch" go build -trimpath -ldflags "$LDFLAGS" -o "$app/Contents/MacOS/fdl-app" ./cmd/fdl-app
+    cat > "$app/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDisplayName</key><string>fdl</string>
+	<key>CFBundleExecutable</key><string>fdl-app</string>
+	<key>CFBundleIdentifier</key><string>io.github.nightgopher.fdl</string>
+	<key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+	<key>CFBundleName</key><string>fdl</string>
+	<key>CFBundlePackageType</key><string>APPL</string>
+	<key>CFBundleShortVersionString</key><string>${VERSION#v}</string>
+	<key>CFBundleVersion</key><string>${VERSION#v}</string>
+	<key>LSMinimumSystemVersion</key><string>12.0</string>
+	<key>NSHighResolutionCapable</key><true/>
+	<key>NSPrincipalClass</key><string>NSApplication</string>
+</dict>
+</plist>
+PLIST
+    printf 'APPL????' > "$app/Contents/PkgInfo"
+    vol="fdl-${VERSION}"
+    hdiutil create -quiet -volname "$vol" -srcfolder "$app" -ov -format UDZO \
+        "$OUT/fdl-${VERSION}-${arch}.dmg"
+    rm -rf "$app"
+    echo "✓ fdl-${VERSION}-${arch}.dmg"
+done
 cp scripts/install.sh "$OUT/"
 echo "✓ checksums.txt + install.sh"
