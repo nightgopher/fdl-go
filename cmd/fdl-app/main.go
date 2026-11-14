@@ -153,6 +153,14 @@ func (a *app) save() {
 	}
 }
 
+// syncSelection 切换笔记：选中变了先保存当前，再打开新选的。
+func (a *app) syncSelection() {
+	if a.selected != "" && (a.cur == nil || a.selected != a.cur.id) {
+		a.save()
+		a.open(a.selected)
+	}
+}
+
 // del 把笔记移入回收站并清空编辑区。
 func (a *app) del(id string) {
 	if a.cur != nil && a.cur.id == id {
@@ -176,6 +184,7 @@ func (a *app) view(c *ui.Context) {
 		a.reload()
 		a.lastReload = time.Now()
 	}
+	a.syncSelection()
 	if c.Shortcut(ui.Cmd, ui.KeyN) {
 		a.add()
 	}
