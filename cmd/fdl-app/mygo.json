@@ -1,0 +1,14 @@
+{
+  "name": "fdl",
+  "slug": "fdl",
+  "identifier": "io.github.nightgopher.fdl",
+  "copyright": "Copyright © 2026 nightgopher",
+  "version": "0.2.4",
+  "license": "MIT",
+  "icon": "resources/icon.png",
+  "updates": {
+    "publicKey": "WpofKREOKjPwGGgtsRwHkU1AUv5H1HguFWDUIBeVNcs=",
+    "github": "nightgopher/fdl-go",
+    "tagPrefix": "v"
+  }
+}
