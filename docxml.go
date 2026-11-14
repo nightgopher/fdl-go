@@ -1506,3 +1506,17 @@ func trimSuffixAll(s, suf string) string {
 	}
 	return s
 }
+
+// ParseInline 解析一段行内对象的原文 XML（to_inline 的逆），不是行内
+// 对象时返回 nil。
+func ParseInline(xmlText string) *Inline {
+	nodes, err := parseDOM(xmlText)
+	if err != nil || len(nodes) == 0 || nodes[0].el == nil {
+		return nil
+	}
+	in := inlineOf(nodes[0].el)
+	if _, isOther := in.Kind.(OtherInline); isOther {
+		return nil
+	}
+	return &in
+}

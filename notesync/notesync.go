@@ -481,5 +481,8 @@ func (s *Syncer) DebugSync() (pull, push Stats, err error) {
 // import 本包）。
 func DefaultLibRoot() string { return fdl.RootDir() }
 
+// Version 返回构建版本号。
+func Version() string { return fdl.Version }
+
 // GitInit 在目录里 git init（已存在则不动）。
 func GitInit(dir string) { gitRun(dir, "init", "-q") }

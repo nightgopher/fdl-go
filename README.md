@@ -5,8 +5,9 @@
 ```
                      ┌─ Quiet.md（Rust GUI，人用，高性能编辑）
                      │
-~/Documents/Quiet.md ┼─ fdl-mcp   MCP server —— AI（easyagent/Claude 等）挂载读写
-（共享磁盘文档库）     ├─ fdl-web   本地 Web 客户端 —— 浏览/搜索/Markdown 编辑
+~/Documents/Quiet.md ┼─ fdl-app   原生桌面客户端（mygo）—— 富文本所见即所得编辑
+（共享磁盘文档库）     ├─ fdl-mcp   MCP server —— AI（easyagent/Claude 等）挂载读写
+                     ├─ fdl-web   本地 Web 客户端 —— 浏览/搜索/Markdown 编辑
                      ├─ fdl-sync  GitHub 同步 —— .md 镜像仓库双向同步
                      └─ fdl       CLI —— round-trip 校验/格式转换/检查
 ```
@@ -99,6 +100,21 @@ fdl-sync pull -git ~/notes-repo   # 只拉：仓库 → 库（git pull 后导入
 镜像里每篇笔记是一个「标题.md」（图片在 `<名>.assets/` 旁目录），`.fdl-sync.json` 维护映射与内容哈希。GitHub 网页上：改 `.md` → 更新笔记；新增 → 新笔记；删除 → 移入回收站。库侧改名 → 镜像文件 git rename；导出走原位写回，未改的块保持镜像格式。
 
 同步按内容哈希跳过没变的一侧，因此单侧改动不会被反向覆盖；**同一篇两边都改**是真冲突，以后跑的方向为准（建议改前先拉、改完就推，不在两边同时改同一篇）。
+
+### fdl-app：原生桌面客户端（mygo）
+
+```sh
+go run ./cmd/fdl-app                      # 默认库 ~/Documents/Quiet.md
+QUIET_MD_HOME=/path/to/lib go run ./cmd/fdl-app
+```
+
+左侧笔记列表、右侧富文本编辑（标题/列表/待办/引用/代码块/缩进/行内格式，
+工具栏 + 快捷键），⌘S 保存回库。基于 [mygo](https://github.com/egoist/mygo)
+原生 UI（无 Web 堆栈，CGO_ENABLED=0），编辑器模型与 fdl 引擎经转换层互
+通：块级 Heading/List/Tasks/Quote/CodeBlock/Indent 一一对应，行内样式
+Marks ↔ Attributes，行内对象（公式/附件/提及）经 Tag 往返，原子块（表格/
+图片/分割线…）整块存 ParagraphStyle.ID 原样还原。已知偏差：编辑器列表从
+1 编号（seq 丢失）、代码块语言名不保留。
 
 ### fdl：CLI
 
