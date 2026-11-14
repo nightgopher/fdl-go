@@ -34,7 +34,13 @@
 
 ## 下载安装
 
-从 [Releases](https://github.com/nightgopher/fdl-go/releases/latest) 下载对应平台的包（macOS arm64/amd64、Linux amd64/arm64），每个包含全部四个工具：
+从 [Releases](https://github.com/nightgopher/fdl-go/releases/latest) 下载对应平台的包（macOS arm64/amd64、Linux amd64/arm64），每个包含全部五个工具。**一键安装**（自动检测平台，装到 `~/bin`）：
+
+```sh
+curl -fsSL https://github.com/nightgopher/fdl-go/releases/latest/download/install.sh | sh
+```
+
+手动下载：
 
 ```sh
 curl -LO https://github.com/nightgopher/fdl-go/releases/latest/download/fdl-go-v0.2.0-darwin-arm64.tar.gz

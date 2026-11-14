@@ -23,4 +23,5 @@ for target in "${TARGETS[@]}"; do
     echo "✓ $dir.tar.gz"
 done
 (cd "$OUT" && shasum -a 256 *.tar.gz > checksums.txt)
-echo "✓ checksums.txt"
+cp scripts/install.sh "$OUT/"
+echo "✓ checksums.txt + install.sh"

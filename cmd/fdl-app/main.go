@@ -7,6 +7,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 	"sort"
@@ -375,10 +376,21 @@ func main() {
 	}
 	a := &app{store: store}
 	a.reload()
+	// 启动静默检查更新（有新版只提示一次，不打扰）。
+	go checkUpdate(context.Background(), false)
 
 	mygo.App.WhenReady(func() {
+		updateCtx, cancelUpdates := context.WithCancel(context.Background())
+		_ = cancelUpdates
 		mygo.App.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
-			{Role: mygo.RoleAppMenu},
+			{Role: mygo.RoleAppMenu, Submenu: []*mygo.MenuItem{
+				{Label: "检查更新…", Click: func(*mygo.MenuItem, *mygo.Window) {
+					go checkUpdate(updateCtx, true)
+				}},
+				mygo.Separator(),
+				{Role: mygo.RoleAbout},
+				{Role: mygo.RoleQuit},
+			}},
 			{Role: mygo.RoleFileMenu},
 			{Role: mygo.RoleEditMenu},
 			{Role: mygo.RoleFormatMenu},
